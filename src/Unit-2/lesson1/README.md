@@ -2,6 +2,7 @@
 We're going to be spending most of our time in Unit 2 working with the `ChartingActor`, an actor that is responsible for actually plotting all the data on this chart:
 
 ![Pretty output](../lesson5/images/syncharting-complete-output.gif)
+> NOTE: If you're following along using the eBook / .ePub, you won't see the animation. [Click here to see it](https://github.com/petabridge/akka-bootcamp/blob/master/src/Unit-2/lesson5/images/syncharting-complete-output.gif).
 
 BUT, if you try to build and run `SystemCharting.sln` right now (in the [/DoThis/ folder](../DoThis/)) for Unit 2 right away, you'll see the following output:
 
@@ -36,15 +37,19 @@ The default dispatcher in Akka.NET is the `ThreadPoolDispatcher`. As you can pro
 There are several types of `Dispatcher`s we can use with our actors:
 
 ##### `SingleThreadDispatcher`
-This `Dispatcher` runs multiple actors on a single thread;
+This `Dispatcher` runs multiple actors on a single thread.
 
 ##### `ThreadPoolDispatcher` (default)
-This `Dispatcher` runs actors on top of the CLR `ThreadPool` for maximum concurrency;
+This `Dispatcher` runs actors on top of the CLR `ThreadPool` for maximum concurrency.
 
-##### `CurrentSynchronizationContextDispatcher`
+##### `SynchronizedDispatcher`
 This `Dispatcher` schedules all actor messages to be processed in the same synchronization context as the caller. 99% of the time, this is where you're going to run actors that need access to the UI thread, such as in client applications.
 
-In this lesson, we're going to use the `CurrentSynchronizationContextDispatcher` to ensure that the `ChartingActor` runs on the UI thread of our WinForms application. That way, the `ChartingActor` can update any UI element it wants without having to do any cross-thread marshalling - the actor's `Dispatcher` can automatically take care of that for us!
+The `SynchronizedDispatcher` uses the *current* [SynchronizationContext](https://msdn.microsoft.com/en-us/magazine/gg598924.aspx) to schedule executions.
+
+> **Note:** As a general rule, actors running in the `SynchronizedDispatcher` shouldn't do much work. Avoid doing any extra work that may be done by actors running in other pools.
+
+In this lesson, we're going to use the `SynchronizedDispatcher` to ensure that the `ChartingActor` runs on the UI thread of our WinForms application. That way, the `ChartingActor` can update any UI element it wants without having to do any cross-thread marshalling - the actor's `Dispatcher` can automatically take care of that for us!
 
 ##### [`ForkJoinDispatcher`](http://api.getakka.net/docs/stable/html/F0DC1571.htm "Akka.NET Stable API Docs - ForkJoinDispatcher")
 This `Dispatcher` runs actors on top of a dedicated group of threads, for tunable concurrency.
@@ -111,7 +116,7 @@ When an actor is instantiated within the `ActorSystem` it can be deployed in one
 
 When an actor is deployed by the `ActorSystem`, it has a range of configuration settings. These settings control a wide range of behavior options for the actor, such as: is this actor going to be a router? What `Dispatcher` will it use? What type of mailbox will it have? (More on these concepts in later lessons.)
 
-We haven't gone over what all these options mean, but *the key thing to know for now is that the settings used by the `ActorSystem` to deploy an actor into service can be set within HOCON. *
+We haven't gone over what all these options mean, but *the key thing to know for now is that the settings used by the `ActorSystem` to deploy an actor into service can be set within HOCON.*
 
 ***This also means that you can change the behavior of actors dramatically (by changing these settings) without having to actually touch the actor code itself.***
 
@@ -142,7 +147,7 @@ Here's an example of using HOCON inside `App.config`:
             loglevel = ERROR
             # this config section will be referenced as akka.actor
             actor {
-              provider = "Akka.Remote.RemoteIActorRefProvider, Akka.Remote"
+              provider = "Akka.Remote.RemoteActorRefProvider, Akka.Remote"
               debug {
                   receive = on
                   autoreceive = on
@@ -183,6 +188,7 @@ Although this isn't a concept we leverage explicitly in Unit 2, it's a powerful 
 HOCON supports the concept of "fallback" configurations - it's easiest to explain this concept visually.
 
 ![Normal HOCON Config Behavior](images/hocon-config-normally.gif)
+> NOTE: If you're following along using the eBook / .ePub, you won't see the animation. [Click here to see it](https://github.com/petabridge/akka-bootcamp/raw/master/src/Unit-2/lesson1/images/hocon-config-normally.gif).
 
 To create something that looks like the diagram above, we have to create a `Config` object that has three fallbacks chained behind it using syntax like this:
 
@@ -216,13 +222,14 @@ var c = yourConfig.GetString("c");
 ```
 
 ![Fallback HOCON Config Behavior](images/hocon-config-fallbacks.gif)
+> NOTE: If you're following along using the eBook / .ePub, you won't see the animation. [Click here to see it](https://github.com/petabridge/akka-bootcamp/raw/master/src/Unit-2/lesson1/images/hocon-config-fallbacks.gif).
 
 In this case `yourConfig` will fallback twice to `f2` and return "baz" as the value for key `c`.
 
 Now that we understand HOCON, let's use it to fix the `Dispatcher` for `ChartingActor`!
 
 ## Exercise
-We need to configure `ChartingActor` to use the `CurrentSynchronizationContextDispatcher` in order to make our charting work correctly on the UI thread.
+We need to configure `ChartingActor` to use the `SynchronizedDispatcher` in order to make our charting work correctly on the UI thread.
 
 ### Add Akka.NET Config Section to `App.config`
 The first thing you need to do is declare the `AkkaConfigurationSection` at the top of your `App.config`:
@@ -231,7 +238,7 @@ The first thing you need to do is declare the `AkkaConfigurationSection` at the 
 <!-- in App.config file -->
 <!-- add this right after the opening <configuration> tag -->
 <configSections>
-    <section name="akka" type="Akka.Configuration.Hocon.AkkaConfigurationSection, Akka" />
+ <section name="akka" type="Akka.Configuration.Hocon.AkkaConfigurationSection, Akka" />
 </configSections>
 ```
 
@@ -268,7 +275,8 @@ You might have also noticed that the configuration section that pertains to the 
 Here's how we create the `ChartingActor` inside `Main.cs`:
 
 ```csharp
- _chartActor = Program.ChartActors.ActorOf(Props.Create(() => new ChartingActor(sysChart)), "charting");
+ _chartActor = Program.ChartActors.ActorOf(Props.Create(() =>
+  new ChartingActor(sysChart)), "charting");
 ```
 
 When we call `ActorSystem.ActorOf` the `ActorOf` method will automatically look for any deployments declared in the `akka.actor.deployment` configuration section that correspond to the path of this actor. In this case, the path of this actor is `/user/charting`, which corresponds to the `akka.actor.deployment` values for `/charting` in the config section above.
@@ -289,13 +297,12 @@ Compare your code to the code in the [/Completed/ folder](Completed/) to compare
 ## Great job!
 Nice work on completing your first lesson in Unit 2! We covered a lot of concepts and hopefully you're going to walk away from this with an appreciation for just how powerful Akka.NET's configuration model truly is.
 
-**Let's move onto [Lesson 2 - Using `ReceiveActor` for Smarter Message Handling](../lesson2).**
+**Let's move onto [Lesson 2 - Using `ReceiveActor` for Smarter Message Handling](../lesson2/README.md).**
 
 ## Further reading
-As you probably guessed while reading the HOCON configs above, any line with `#` at the front of it is treated as a comment in HOCON. [Learn more about HOCON syntax here](http://getakka.net/wiki/HOCON).
+As you probably guessed while reading the HOCON configs above, any line with `#` at the front of it is treated as a comment in HOCON. [Learn more about HOCON syntax here](http://getakka.net/docs/HOCON).
 
 ## Any questions?
-**Don't be afraid to ask questions** :).
 
 Come ask any questions you have, big or small, [in this ongoing Bootcamp chat with the Petabridge & Akka.NET teams](https://gitter.im/petabridge/akka-bootcamp).
 

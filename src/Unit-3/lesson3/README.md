@@ -1,12 +1,12 @@
 # Lesson 3.3: How to use HOCON to configure your routers
 Awesome, look at you go! By now, you understand the massive increases in throughput that routers can give you, and what the different types of routers are.
 
-Now we need to show you how to configure and deploy them :)
+Now we need to show you how to configure and deploy them.
 
 ## Key Concepts / Background
 ### HOCON for `Router`s
 #### Quick review of HOCON
-We first learned about HOCON in [Lesson 2.1](../../Unit-2/lesson1/).
+We first learned about HOCON in [Lesson 2.1](../../Unit-2/lesson1/README.md).
 
 To review, [HOCON (Human-Optimized Config Object Notation)](http://getakka.net/docs/concepts/hocon) is a flexible and extensible configuration format. It will allow you to configure everything from Akka.NET's `IActorRefProvider` implementation, logging, network transports, and more commonly - how individual actors are deployed.
 
@@ -88,10 +88,6 @@ The only thing we can think of that MUST be configured procedurally is the `Hash
 
 Everything else we can think of can be configured either way, but we prefer to do all our configuration via HOCON.
 
-#### How do I use the HOCON config?
-setting up router needs a router config
-as long as the router config passed isn't "no router" then it will
-
 #### Which configuration wins: procedural, or HOCON?
 HOCON wins. This is true for all actors, not just routers.
 
@@ -110,7 +106,8 @@ Suppose you defined the following router via configuration:
 But when it came time to create router1, you gave `Props` the following procedural router definition:
 
 ```csharp
-var router1 = MyActorSystem.ActorOf(Props.Create(() => new FooActor()).WithRouter(new RoundRobinPool(10)), "router1");
+var router1 = MyActorSystem.ActorOf(Props.Create(() =>
+  new FooActor()).WithRouter(new RoundRobinPool(10)), "router1");
 ```
 
 You'd still get a `ConsistentHashingPool` with 3 instances of `FooActor` instead of a `RoundRobinPool` with 10 instances of `FooActor`.
@@ -133,7 +130,8 @@ Here's an example:
 And if we make the following call to `ActorOf`:
 
 ```csharp
-var router1 = MyActorSystem.ActorOf(Props.Create(() => new FooActor()).WithRouter(FromConfig.Instance), "router1");
+var router1 = MyActorSystem.ActorOf(Props.Create(() =>
+  new FooActor()).WithRouter(FromConfig.Instance), "router1");
 ```
 
 Then we'll get a `ConsistentHashingPool` router.
@@ -152,8 +150,6 @@ Bonus concept! We're also going to teach you to use `Ask` in addition to HOCON.
 #### What is `Ask`?
 `Ask` is how one actor can ask another actor for some information and wait for a reply.
 
-***NOTE: `Ask` is a blocking, synchronous operation.***
-
 #### When do I use `Ask`?
 Whenever you want one actor to retrieve information from another and wait for a response. It isn't used that often—certainly not compared to `Tell()`—but there are places where it is ***exactly*** what you need.
 
@@ -168,8 +164,10 @@ We'll add our configuration section first, before we modify the code inside `Git
 Open `App.config` and add the following inside the `akka.actor.deployment` section:
 
 ```xml
-<!-- inside App.config, in the akka.actor.deployment section with all of the other HOCON -->
-<!-- you can add this immediately after the /authenticator deployment specification -->
+<!-- inside App.config, in the akka.actor.deployment 
+      section with all of the other HOCON -->
+<!-- you can add this immediately after the 
+      /authenticator deployment specification -->
 /commander/coordinator{
   router = broadcast-pool
   nr-of-instances = 3
@@ -193,14 +191,15 @@ private void BecomeAsking()
 {
     _canAcceptJobSender = Sender;
     // block, but ask the router for the number of routees. Avoids magic numbers.
-    pendingJobReplies = _coordinator.Ask<Routees>(new GetRoutees()).Result.Members.Count();
+    pendingJobReplies = _coordinator.Ask<Routees>(new GetRoutees())
+      .Result.Members.Count();
     Become(Asking);
 }
 ```
 
 Since the number of routees underneath `_coordinator` is now defined via configuration, we're going to `Ask<T>` the router using a built-in `GetRoutees` message to determine how many replies we need (1 per routee) before we can accept a new job. This is a special message that tells the router to return the full list of all of its current `Routees` back to the sender.
 
-This is an asynchronous operation, but we're going to block and wait for the result - because the `GithubCommander`can't execute its next behavior until it knows how many parallel jobs can be run at once, which is determined by the number of routees.
+`Ask` is usually an asynchronous operation, but in this case we're going to block and wait for the result - because the `GithubCommander` can't execute its next behavior until it knows how many parallel jobs can be run at once, which is determined by the number of routees.
 
 > **NOTE: Blocking is not evil**. In the wake of `async` / `await`, many .NET developers have come to the conclusion that blocking is an anti-pattern or generally evil. This is ludicrous. It depends entirely on the context. Blocking is absolutely the right thing to do if your application can't proceed until the operation you're waiting on finishes, and that's the case here.
 
@@ -210,10 +209,12 @@ Finally, replace the `GithubCommanderActor`'s `PreStart` method with the followi
 // replace GithubCommanderActor's PreStart method with this
 protected override void PreStart()
 {
-    // create a broadcast router who will ask all if them if they're available for work
+    // create a broadcast router who will ask all 
+    // of them if they're available for work
     _coordinator =
-        Context.ActorOf(Props.Create(() => new GithubCoordinatorActor()).WithRouter(FromConfig.Instance),
-        ActorPaths.GithubCoordinatorActor.Name);
+        Context.ActorOf(Props.Create(() => new GithubCoordinatorActor())
+          .WithRouter(FromConfig.Instance),
+          ActorPaths.GithubCoordinatorActor.Name);
     base.PreStart();
 }
 ```
@@ -228,11 +229,9 @@ Effectively you've just made the number of concurrent jobs `GithubActors.sln` ca
 ## Great job!
 We've been able to leverage routers for parallelism both via explicit programmatic deployments and via configuration.
 
-**And now it's time to achieve maximum parallelism using the TPL in the next lesson: [Lesson 4 - How to perform work asynchronously inside your actors using `PipeTo`](../lesson4)**
+**And now it's time to achieve maximum parallelism using the TPL in the next lesson: [Lesson 4 - How to perform work asynchronously inside your actors using `PipeTo`](../lesson4/README.md)**
 
 ## Any questions?
-**Don't be afraid to ask questions** :).
-
 Come ask any questions you have, big or small, [in this ongoing Bootcamp chat with the Petabridge & Akka.NET teams](https://gitter.im/petabridge/akka-bootcamp).
 
 ### Problems with the code?

@@ -115,7 +115,7 @@ Every actor has an address. To send a message from one actor to another, you jus
 
 > *The "Path" portion of an actor address is just a description of where that actor is in your actor hierarchy. Each level of the hierarchy is separated by a single slash ('/').*
 
-For example, if we were running on `localhost`, the full address of actor `b2` would be `akka.tcp://MyActorSystem@localhost:9001/user/a1/b2`.
+For example, if we were running on `localhost`, the full address of actor `b2` would be `akka.tcp://MyActorSystem@localhost:9001/user/a2/b2`.
 
 One question that comes up a lot is, "Do my actor classes have to live at a certain point in the hierarchy?" For example, if I have an actor class, `FooActor`—can I only deploy that actor as a child of `BarActor` on the hierarchy? Or can I deploy it anywhere?
 
@@ -143,10 +143,10 @@ There are two factors that determine how a failure is resolved:
 
 ##### Here's the sequence of events when an error occurs:
 
-1. Unhandled exception occurs in child actor (`c1`), which is supervised by its parent (`p1`).
+1. Unhandled exception occurs in child actor (`c1`), which is supervised by its parent (`b1`).
 2. `c1` suspends operations.
-3. The system sends a `Failure` message from `c1` to `p1`, with the `Exception` that was raised.
-4. `p1` issues a directive to `c1` telling it what to do.
+3. The system sends a `Failure` message from `c1` to `b1`, with the `Exception` that was raised.
+4. `b1` issues a directive to `c1` telling it what to do.
 5. Life goes on, and the affected part of the system heals itself without burning down the whole house. Kittens and unicorns, handing out free ice cream and coffee to be enjoyed while relaxing on a pillowy rainbow. Yay!
 
 
@@ -261,7 +261,8 @@ namespace WinTail
         private readonly IActorRef _consoleWriterActor;
         private readonly IActorRef _tailCoordinatorActor;
 
-        public FileValidatorActor(IActorRef consoleWriterActor, IActorRef tailCoordinatorActor)
+        public FileValidatorActor(IActorRef consoleWriterActor,
+            IActorRef tailCoordinatorActor)
         {
             _consoleWriterActor = consoleWriterActor;
             _tailCoordinatorActor = tailCoordinatorActor;
@@ -273,9 +274,11 @@ namespace WinTail
             if (string.IsNullOrEmpty(msg))
             {
                 // signal that the user needs to supply an input
-                _consoleWriterActor.Tell(new Messages.NullInputError("Input was blank. Please try again.\n"));
+                _consoleWriterActor.Tell(new Messages.NullInputError("Input was blank.
+                Please try again.\n"));
 
-                // tell sender to continue doing its thing (whatever that may be, this actor doesn't care)
+                // tell sender to continue doing its thing (whatever that may be,
+                // this actor doesn't care)
                 Sender.Tell(new Messages.ContinueProcessing());
             }
             else
@@ -284,17 +287,21 @@ namespace WinTail
                 if (valid)
                 {
                     // signal successful input
-                    _consoleWriterActor.Tell(new Messages.InputSuccess(string.Format("Starting processing for {0}", msg)));
+                    _consoleWriterActor.Tell(new Messages.InputSuccess(
+                        string.Format("Starting processing for {0}", msg)));
 
                     // start coordinator
-                    _tailCoordinatorActor.Tell(new TailCoordinatorActor.StartTail(msg, _consoleWriterActor));
+                    _tailCoordinatorActor.Tell(new TailCoordinatorActor.StartTail(msg,
+                        _consoleWriterActor));
                 }
                 else
                 {
                     // signal that input was bad
-                    _consoleWriterActor.Tell(new Messages.ValidationError(string.Format("{0} is not an existing URI on disk.", msg)));
+                    _consoleWriterActor.Tell(new Messages.ValidationError(
+                        string.Format("{0} is not an existing URI on disk.", msg)));
 
-                    // tell sender to continue doing its thing (whatever that may be, this actor doesn't care)
+                    // tell sender to continue doing its thing (whatever that
+                    // may be, this actor doesn't care)
                     Sender.Tell(new Messages.ContinueProcessing());
                 }
             }
@@ -320,7 +327,8 @@ You'll also want to make sure to update the `Props` instance in `Main` that refe
 
 ```csharp
 // Program.cs
-Props validationActorProps = Props.Create(() => new FileValidatorActor(consoleWriterActor));
+Props validationActorProps = Props.Create(
+  () => new FileValidatorActor(consoleWriterActor));
 ```
 
 #### Update `DoPrintInstructions`
@@ -350,7 +358,8 @@ using Akka.Actor;
 namespace WinTail
 {
     /// <summary>
-    /// Turns <see cref="FileSystemWatcher"/> events about a specific file into messages for <see cref="TailActor"/>.
+    /// Turns <see cref="FileSystemWatcher"/> events about a specific file into
+    /// messages for <see cref="TailActor"/>.
     /// </summary>
     public class FileObserver : IDisposable
     {
@@ -374,12 +383,14 @@ namespace WinTail
         public void Start()
         {
             // Need this for Mono 3.12.0 workaround
-            // Environment.SetEnvironmentVariable("MONO_MANAGED_WATCHER", "enabled"); // uncomment this line if you're running on Mono!
+            // uncomment next line if you're running on Mono!
+            // Environment.SetEnvironmentVariable("MONO_MANAGED_WATCHER", "enabled");
 
             // make watcher to observe our specific file
             _watcher = new FileSystemWatcher(_fileDir, _fileNameOnly);
 
-            // watch our file for changes to the file name, or new messages being written to file
+            // watch our file for changes to the file name,
+            // or new messages being written to file
             _watcher.NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite;
 
             // assign callbacks for event types
@@ -406,7 +417,9 @@ namespace WinTail
         /// <param name="e"></param>
         void OnFileError(object sender, ErrorEventArgs e)
         {
-            _tailActor.Tell(new TailActor.FileError(_fileNameOnly, e.GetException().Message), ActorRefs.NoSender);
+            _tailActor.Tell(new TailActor.FileError(_fileNameOnly,
+                e.GetException().Message),
+                ActorRefs.NoSender);
         }
 
         /// <summary>
@@ -419,7 +432,8 @@ namespace WinTail
             if (e.ChangeType == WatcherChangeTypes.Changed)
             {
                 // here we use a special ActorRefs.NoSender
-                // since this event can happen many times, this is a little microoptimization
+                // since this event can happen many times,
+                // this is a little microoptimization
                 _tailActor.Tell(new TailActor.FileWrite(e.Name), ActorRefs.NoSender);
             }
 
@@ -503,11 +517,14 @@ In `Main()`, create a new `IActorRef` for `TailCoordinatorActor` and then pass i
 // Program.Main
 // make tailCoordinatorActor
 Props tailCoordinatorProps = Props.Create(() => new TailCoordinatorActor());
-IActorRef tailCoordinatorActor = MyActorSystem.ActorOf(tailCoordinatorProps, "tailCoordinatorActor");
+IActorRef tailCoordinatorActor = MyActorSystem.ActorOf(tailCoordinatorProps,
+    "tailCoordinatorActor");
 
 // pass tailCoordinatorActor to fileValidatorActorProps (just adding one extra arg)
-Props fileValidatorActorProps = Props.Create(() => new FileValidatorActor(consoleWriterActor, tailCoordinatorActor));
-IActorRef validationActor = MyActorSystem.ActorOf(fileValidatorActorProps, "validationActor");
+Props fileValidatorActorProps = Props.Create(() =>
+new FileValidatorActor(consoleWriterActor, tailCoordinatorActor));
+IActorRef validationActor = MyActorSystem.ActorOf(fileValidatorActorProps,
+    "validationActor");
 ```
 
 #### Add `TailActor`
@@ -524,14 +541,16 @@ using Akka.Actor;
 namespace WinTail
 {
     /// <summary>
-    /// Monitors the file at <see cref="_filePath"/> for changes and sends file updates to console.
+    /// Monitors the file at <see cref="_filePath"/> for changes and sends
+    /// file updates to console.
     /// </summary>
     public class TailActor : UntypedActor
     {
         #region Message types
 
         /// <summary>
-        /// Signal that the file has changed, and we need to read the next line of the file.
+        /// Signal that the file has changed, and we need to 
+        /// read the next line of the file.
         /// </summary>
         public class FileWrite
         {
@@ -591,12 +610,13 @@ namespace WinTail
             _observer = new FileObserver(Self, Path.GetFullPath(_filePath));
             _observer.Start();
 
-            // open the file stream with shared read/write permissions (so file can be written to while open)
-            _fileStream = new FileStream(Path.GetFullPath(_filePath), FileMode.Open, FileAccess.Read,
-                FileShare.ReadWrite);
+            // open the file stream with shared read/write permissions
+            // (so file can be written to while open)
+            _fileStream = new FileStream(Path.GetFullPath(_filePath),
+                FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             _fileStreamReader = new StreamReader(_fileStream, Encoding.UTF8);
 
-            // read the initial contents of the file and send it to console as first message
+            // read the initial contents of the file and send it to console as first msg
             var text = _fileStreamReader.ReadToEnd();
             Self.Tell(new InitialRead(_filePath, text));
         }
@@ -647,7 +667,8 @@ protected override void OnReceive(object message)
 		// here we are creating our first parent/child relationship!
 		// the TailActor instance created here is a child
 		// of this instance of TailCoordinatorActor
-        Context.ActorOf(Props.Create(() => new TailActor(msg.ReporterActor, msg.FilePath)));
+        Context.ActorOf(Props.Create(
+          () => new TailActor(msg.ReporterActor, msg.FilePath)));
     }
 
 }
@@ -659,7 +680,7 @@ You have just established your first parent/child actor relationship!
 ### Phase 3: Implement a `SupervisorStrategy`
 Now it's time to add a supervision strategy to your new parent, `TailCoordinatorActor`.
 
-The default `SupervisorStrategy` is a One-For-One strategy ([docs](http://getakka.net/wiki/Supervision#one-for-one-strategy-vs-all-for-one-strategy)) w/ a Restart directive ([docs](http://getakka.net/wiki/Supervision#what-restarting-means)).
+The default `SupervisorStrategy` is a One-For-One strategy ([docs](http://getakka.net/docs/Supervision#one-for-one-strategy-vs-all-for-one-strategy)) w/ a Restart directive ([docs](http://getakka.net/docs/Supervision#what-restarting-means)).
 
 Add this code to the bottom of `TailCoordinatorActor`:
 
@@ -718,7 +739,7 @@ Here is a high-level overview of our working system!
 
 ![Akka.NET Unit 1 Tail System Diagram](Images/system_overview.png)
 
-**Let's move onto [Lesson 5 - Looking up Actors by Address with `ActorSelection`](../lesson5).**
+**Let's move onto [Lesson 5 - Looking up Actors by Address with `ActorSelection`](../lesson5/README.md).**
 
 ---
 ## Supervision FAQ
@@ -736,7 +757,6 @@ The current message being processed by an actor when it is halted (regardless of
 
 
 ## Any questions?
-**Don't be afraid to ask questions** :).
 
 Come ask any questions you have, big or small, [in this ongoing Bootcamp chat with the Petabridge & Akka.NET teams](https://gitter.im/petabridge/akka-bootcamp).
 
