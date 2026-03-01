@@ -1,0 +1,43 @@
+name: Build and Test Solutions
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        unit: ['unit-0', 'unit-1']
+
+    steps:
+    - uses: actions/checkout@v5
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        global-json-file: './global.json'
+    
+    - name: Set Project Path
+      id: set-path
+      run: |
+        if [ "${{ matrix.unit }}" == "unit-0" ]; then
+          echo "project_path=${{ matrix.unit }}/completed/AkkaWordCounter" >> $GITHUB_OUTPUT
+        else
+          echo "project_path=${{ matrix.unit }}/completed" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Restore dependencies
+      working-directory: ${{ steps.set-path.outputs.project_path }}
+      run: dotnet restore
+
+    - name: Build
+      working-directory: ${{ steps.set-path.outputs.project_path }}
+      run: dotnet build -c Release --no-restore
+
+    - name: Test
+      working-directory: ${{ steps.set-path.outputs.project_path }}
+      run: dotnet test -c Release --no-build 
